@@ -1,11 +1,11 @@
 package com.sprintboot.webapp.plantilla.config;
 
-
 import com.sprintboot.webapp.plantilla.modules.auth.application.JwtService;
 import com.sprintboot.webapp.plantilla.modules.auth.infrastructure.JwtAuthenticationFilter;
 import com.sprintboot.webapp.plantilla.modules.auth.infrastructure.repository.RevokedTokenRepository;
 import com.sprintboot.webapp.plantilla.modules.logging.application.RequestLogService;
 import com.sprintboot.webapp.plantilla.modules.logging.infrastructure.RequestLoggingFilter;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.*;
 import org.springframework.core.env.Environment;
@@ -19,6 +19,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.*;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import java.time.Instant;
 import java.util.Arrays;
 
 @Configuration
@@ -33,7 +34,7 @@ public class SecurityConfig {
     private final JwtService jwtService;
     private final RevokedTokenRepository revokedRepo;
     private final Environment env;
-    private final RequestLogService requestLogService; // <-- inyectar
+    private final RequestLogService requestLogService;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -46,9 +47,39 @@ public class SecurityConfig {
                     if (isDev) auth.requestMatchers(SWAGGER_WHITELIST).permitAll();
                     auth.anyRequest().authenticated();
                 })
+                // ⭐ NUEVO: Manejo de excepciones
+                .exceptionHandling(ex -> ex
+                        // 401: Sin autenticación (sin token o token inválido)
+                        .authenticationEntryPoint((request, response, authException) -> {
+                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                            response.setContentType("application/json;charset=UTF-8");
+                            response.getWriter().write(String.format("""
+                                    {
+                                        "timestamp": "%s",
+                                        "status": 401,
+                                        "error": "Unauthorized",
+                                        "message": "Se requiere autenticación. Por favor, proporciona un token válido.",
+                                        "path": "%s"
+                                    }
+                                    """, Instant.now(), request.getRequestURI()));
+                        })
+                        // 403: Con autenticación pero sin permisos
+                        .accessDeniedHandler((request, response, accessDeniedException) -> {
+                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                            response.setContentType("application/json;charset=UTF-8");
+                            response.getWriter().write(String.format("""
+                                    {
+                                        "timestamp": "%s",
+                                        "status": 403,
+                                        "error": "Forbidden",
+                                        "message": "No tienes permisos suficientes para acceder a este recurso.",
+                                        "path": "%s"
+                                    }
+                                    """, Instant.now(), request.getRequestURI()));
+                        })
+                )
                 .addFilterBefore(new JwtAuthenticationFilter(jwtService, revokedRepo),
                         UsernamePasswordAuthenticationFilter.class)
-                // ↓↓↓ NUEVO: filtro de logging para endpoints no públicos y autenticados
                 .addFilterAfter(new RequestLoggingFilter(
                         requestLogService,
                         buildPublicPatterns(isDev)
@@ -71,7 +102,10 @@ public class SecurityConfig {
         return patterns;
     }
 
-    @Bean public PasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(); }
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration cfg) throws Exception {

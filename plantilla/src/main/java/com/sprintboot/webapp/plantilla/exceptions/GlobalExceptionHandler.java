@@ -54,7 +54,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiError> forbidden(Exception ex, org.springframework.web.context.request.WebRequest req) {
-        log.error("AccessDeniedException: {}", ex.getMessage());
+        log.info("AccessDeniedException: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(new ApiError(Instant.now(), 403, "Forbidden", ex.getMessage(), req.getDescription(false), null));
     }

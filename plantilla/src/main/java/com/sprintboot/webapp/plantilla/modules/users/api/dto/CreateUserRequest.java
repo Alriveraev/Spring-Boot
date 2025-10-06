@@ -1,6 +1,10 @@
 package com.sprintboot.webapp.plantilla.modules.users.api.dto;
 
-import jakarta.validation.constraints.*;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Pattern;
 
 import java.util.Set;
 
@@ -22,7 +26,6 @@ public record CreateUserRequest(
         String password,
 
         @NotEmpty(message = "Debe asignar al menos un rol")
-        @Pattern(regexp = "^[A-Z_]{2,64}$", message = "Los roles deben estar en mayúsculas")
-        Set<String> roles
+        Set<@Pattern(regexp = "^[A-Z_]{2,64}$", message = "Cada rol debe estar en mayúsculas y entre 2-64 caracteres") String> roles
 ) {
 }

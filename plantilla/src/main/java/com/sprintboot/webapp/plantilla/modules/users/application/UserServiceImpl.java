@@ -58,7 +58,7 @@ public class UserServiceImpl implements UserService {
 
     @PreAuthorize("hasRole('ADMIN')")
     public UserDTO create(@Valid CreateUserRequest req) {  // ← AGREGA @Valid AQUÍ
-        log.debug("UserService.create email={}", req.email());
+        log.info("UserService.create email={}", req.email());
         String email = req.email().trim().toLowerCase();
         if (users.existsByEmailNormalized(email)) throw new DataIntegrityViolationException("Email already in use");
 

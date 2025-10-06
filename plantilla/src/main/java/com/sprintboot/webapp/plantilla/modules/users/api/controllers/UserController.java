@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.*;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -19,6 +20,7 @@ import java.net.URI;
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
+@Validated
 public class UserController {
 
     private final UserService service;
@@ -39,7 +41,7 @@ public class UserController {
 
     @Operation(summary = "Crear usuario (ADMIN)")
     @PostMapping
-    public ResponseEntity<UserDTO> create(@Valid @RequestBody CreateUserRequest req) {
+    public ResponseEntity<UserDTO> create(@RequestBody @Valid CreateUserRequest req) {
         log.info("POST /api/users email={}", req.email());
         UserDTO created = service.create(req);
         return ResponseEntity.created(URI.create("/api/users/" + created.id())).body(created);

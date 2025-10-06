@@ -4,7 +4,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public record UserDTO(
-        UUID id,  // ✅ Cambiado de Long a UUID
+        UUID id,
         String firstName,
         String lastName,
         String email,
