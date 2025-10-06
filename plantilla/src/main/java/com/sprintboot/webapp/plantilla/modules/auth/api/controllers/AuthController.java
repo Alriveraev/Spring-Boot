@@ -1,7 +1,10 @@
 package com.sprintboot.webapp.plantilla.modules.auth.api.controllers;
 
 
-import com.sprintboot.webapp.plantilla.modules.auth.api.dto.*;
+import com.sprintboot.webapp.plantilla.modules.auth.api.dto.AuthLoginRequest;
+import com.sprintboot.webapp.plantilla.modules.auth.api.dto.AuthLogoutRequest;
+import com.sprintboot.webapp.plantilla.modules.auth.api.dto.AuthRefreshRequest;
+import com.sprintboot.webapp.plantilla.modules.auth.api.dto.AuthTokensResponse;
 import com.sprintboot.webapp.plantilla.modules.auth.application.AuthService;
 import com.sprintboot.webapp.plantilla.modules.logging.application.RequestLogService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -12,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @Slf4j
@@ -19,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
+@Validated
 public class AuthController {
 
     private final AuthService auth;
@@ -26,7 +31,10 @@ public class AuthController {
 
     @Operation(summary = "Login (público)")
     @PostMapping("/login")
-    public ResponseEntity<AuthTokensResponse> login(@Valid @RequestBody AuthLoginRequest req, HttpServletRequest http) {
+    public ResponseEntity<AuthTokensResponse> login(@RequestBody @Valid AuthLoginRequest req, HttpServletRequest http) {
+
+        log.info("Login request recibido: {}", req); // Agrega esto
+        System.out.println("Login request recibido: " + req); // Agrega esto
         final String path = "/api/auth/login";
         final String ip = http.getRemoteAddr();
         final String ua = http.getHeader("User-Agent");

@@ -2,8 +2,11 @@ package com.sprintboot.webapp.plantilla.modules.logging.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Entity
 @Table(name = "request_logs")
@@ -13,30 +16,45 @@ import java.time.Instant;
 @AllArgsConstructor
 @Builder
 public class RequestLog {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
 
-    private Long userId;
-    @Column(length = 320)
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id", nullable = false, updatable = false)
+    private UUID id;
+
+    @Column(name = "user_id")
+    @JdbcTypeCode(SqlTypes.UUID)
+    private UUID userId;
+
+    @Column(name = "email", length = 320)
     private String email;
 
-    @Column(nullable = false, length = 10)
+    @Column(name = "method", nullable = false, length = 10)
     private String method;
-    @Column(nullable = false, length = 512)
+
+    @Column(name = "path", nullable = false, length = 512)
     private String path;
 
-    @Column(nullable = false)
-    private int statusCode;
-    @Column(nullable = false)
-    private boolean success;
+    @Column(name = "status_code", nullable = false)
+    private Integer statusCode;
 
-    @Column(length = 45)
+    @Column(name = "success", nullable = false)
+    @Builder.Default
+    private boolean success = true;
+
+    @Column(name = "ip_address", length = 45)
     private String ipAddress;
-    @Column(length = 512)
+
+    @Column(name = "user_agent", length = 512)
     private String userAgent;
 
-    @Column(nullable = false)
-    @Builder.Default
-    private Instant occurredAt = Instant.now();
+    @Column(name = "occurred_at", nullable = false, updatable = false)
+    private Instant occurredAt;
+
+    @PrePersist
+    protected void onCreate() {
+        if (occurredAt == null) {
+            occurredAt = Instant.now();
+        }
+    }
 }

@@ -7,6 +7,7 @@ import com.sprintboot.webapp.plantilla.modules.users.domain.User;
 import com.sprintboot.webapp.plantilla.modules.users.infrastructure.mapper.UserMapper;
 import com.sprintboot.webapp.plantilla.modules.users.infrastructure.repository.RoleRepository;
 import com.sprintboot.webapp.plantilla.modules.users.infrastructure.repository.UserRepository;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -16,12 +17,14 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.annotation.Validated;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
+@Validated  // ← AGREGA ESTO
 @Transactional
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
@@ -54,7 +57,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @PreAuthorize("hasRole('ADMIN')")
-    public UserDTO create(CreateUserRequest req) {
+    public UserDTO create(@Valid CreateUserRequest req) {  // ← AGREGA @Valid AQUÍ
         log.debug("UserService.create email={}", req.email());
         String email = req.email().trim().toLowerCase();
         if (users.existsByEmailNormalized(email)) throw new DataIntegrityViolationException("Email already in use");
@@ -68,7 +71,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @PreAuthorize("hasRole('ADMIN')")
-    public UserDTO update(Long id, UpdateUserRequest req) {
+    public UserDTO update(Long id, @Valid UpdateUserRequest req) {  // ← AGREGA @Valid AQUÍ
         log.debug("UserService.update id={} email={}", id, req.email());
         User u = users.findById(id).orElseThrow(() -> new NotFoundException("User not found"));
         String email = req.email().trim().toLowerCase();

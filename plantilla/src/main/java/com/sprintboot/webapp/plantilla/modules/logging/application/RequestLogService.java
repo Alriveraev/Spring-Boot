@@ -6,6 +6,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.UUID;
+
 @Service
 @RequiredArgsConstructor
 public class RequestLogService {
@@ -13,7 +15,7 @@ public class RequestLogService {
     private final RequestLogRepository repo;
 
     @Transactional
-    public void log(Long userId, String email, String method, String path,
+    public void log(UUID userId, String email, String method, String path,  // ✅ UUID en lugar de Long
                     int statusCode, boolean success, String ip, String ua) {
         RequestLog log = RequestLog.builder()
                 .userId(userId)

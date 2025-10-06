@@ -3,8 +3,10 @@ package com.sprintboot.webapp.plantilla.modules.auth.domain;
 import com.sprintboot.webapp.plantilla.modules.users.domain.User;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.UuidGenerator;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Entity
 @Table(name = "user_sessions", uniqueConstraints = @UniqueConstraint(name = "uk_user_sessions_refresh", columnNames = "refresh_token_id"))
@@ -15,8 +17,9 @@ import java.time.Instant;
 @Builder
 public class UserSession {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @UuidGenerator  // ✅ UUID
+    @Column(name = "id", nullable = false, updatable = false)
+    private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)

@@ -2,8 +2,10 @@ package com.sprintboot.webapp.plantilla.modules.auth.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.UuidGenerator;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Entity
 @Table(name = "revoked_tokens", uniqueConstraints = @UniqueConstraint(name = "uk_revoked_tokens_jti", columnNames = "jti"))
@@ -14,8 +16,9 @@ import java.time.Instant;
 @Builder
 public class RevokedToken {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @UuidGenerator  // ✅ UUID
+    @Column(name = "id", nullable = false, updatable = false)
+    private UUID id;
 
     @Column(nullable = false, length = 64)
     private String jti;

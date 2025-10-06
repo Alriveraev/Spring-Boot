@@ -3,8 +3,10 @@ package com.sprintboot.webapp.plantilla.modules.users.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.UuidGenerator;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Entity
 @Table(name = "roles", uniqueConstraints = @UniqueConstraint(name = "uk_roles_code", columnNames = "code"))
@@ -15,8 +17,9 @@ import java.time.Instant;
 @Builder
 public class Role {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @UuidGenerator  // ✅ UUID
+    @Column(name = "id", nullable = false, updatable = false)
+    private UUID id;
 
     @Column(nullable = false, length = 64)
     private String code;
