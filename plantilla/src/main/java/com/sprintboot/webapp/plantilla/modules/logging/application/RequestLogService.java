@@ -15,18 +15,8 @@ public class RequestLogService {
     private final RequestLogRepository repo;
 
     @Transactional
-    public void log(UUID userId, String email, String method, String path,  // ✅ UUID en lugar de Long
-                    int statusCode, boolean success, String ip, String ua) {
-        RequestLog log = RequestLog.builder()
-                .userId(userId)
-                .email(email)
-                .method(method)
-                .path(path)
-                .statusCode(statusCode)
-                .success(success)
-                .ipAddress(ip)
-                .userAgent(ua)
-                .build();
+    public void log(UUID userId, String email, String method, String path, int statusCode, boolean success, String ip, String ua) {
+        RequestLog log = RequestLog.builder().userId(userId).email(email).method(method).path(path).statusCode(statusCode).success(success).ipAddress(ip).userAgent(ua).build();
         repo.save(log);
     }
 }

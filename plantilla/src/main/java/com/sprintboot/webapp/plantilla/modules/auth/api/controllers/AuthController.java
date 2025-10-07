@@ -1,6 +1,6 @@
 package com.sprintboot.webapp.plantilla.modules.auth.api.controllers;
 
-
+import com.sprintboot.webapp.plantilla.api.dto.ApiResponse;
 import com.sprintboot.webapp.plantilla.modules.auth.api.dto.AuthLoginRequest;
 import com.sprintboot.webapp.plantilla.modules.auth.api.dto.AuthLogoutRequest;
 import com.sprintboot.webapp.plantilla.modules.auth.api.dto.AuthRefreshRequest;
@@ -15,7 +15,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @Slf4j
@@ -23,50 +22,45 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
-@Validated
 public class AuthController {
 
     private final AuthService auth;
-    private final RequestLogService requestLog;
 
     @Operation(summary = "Login (público)")
     @PostMapping("/login")
-    public ResponseEntity<AuthTokensResponse> login(@RequestBody @Valid AuthLoginRequest req, HttpServletRequest http) {
+    public ResponseEntity<ApiResponse<AuthTokensResponse>> login(@Valid @RequestBody AuthLoginRequest req, HttpServletRequest http) {
 
-        log.info("Login request recibido: {}", req); // Agrega esto
-        System.out.println("Login request recibido: " + req); // Agrega esto
         final String path = "/api/auth/login";
         final String ip = http.getRemoteAddr();
         final String ua = http.getHeader("User-Agent");
 
-        try {
-            AuthTokensResponse tokens = auth.login(req, ip, ua);
+        log.info("POST {} email={} ip={}", path, req.email(), ip);
 
-            // En nuestro AuthService el subject del JWT es userId; podemos extraerlo parseando el access,
-            // pero más eficiente: AuthService puede retornar también el userId. Para no tocar su firma,
-            // registramos email (si quieres userId, ver alternativa más abajo).
-            requestLog.log(null, req.email(), "POST", path, 200, true, ip, ua);
-
-            return ResponseEntity.ok(tokens);
-        } catch (BadCredentialsException ex) {
-            // (Opcional) log de intento fallido:
-            requestLog.log(null, req.email(), "POST", path, 401, false, ip, ua);
-            throw ex;
-        }
+        AuthTokensResponse tokens = auth.login(req, ip, ua);
+        return ResponseEntity.ok(ApiResponse.success("Login exitoso", tokens));
     }
 
     @Operation(summary = "Refresh token (público con refresh)")
     @PostMapping("/refresh")
-    public ResponseEntity<AuthTokensResponse> refresh(@Valid @RequestBody AuthRefreshRequest req, HttpServletRequest http) {
-        String ip = http.getRemoteAddr();
-        String ua = http.getHeader("User-Agent");
-        return ResponseEntity.ok(auth.refresh(req, ip, ua));
+    public ResponseEntity<ApiResponse<AuthTokensResponse>> refresh(@Valid @RequestBody AuthRefreshRequest req, HttpServletRequest http) {
+
+        final String ip = http.getRemoteAddr();
+        final String ua = http.getHeader("User-Agent");
+
+        log.info("POST /api/auth/refresh ip={}", ip);
+
+        AuthTokensResponse tokens = auth.refresh(req, ip, ua);
+
+        return ResponseEntity.ok(ApiResponse.success("Token renovado exitosamente", tokens));
     }
 
     @Operation(summary = "Logout (público con refresh)")
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(@Valid @RequestBody AuthLogoutRequest req) {
+    public ResponseEntity<ApiResponse<Void>> logout(@Valid @RequestBody AuthLogoutRequest req) {
+        log.info("POST /api/auth/logout");
+
         auth.logout(req);
-        return ResponseEntity.noContent().build();
+
+        return ResponseEntity.ok(ApiResponse.message("Sesión cerrada exitosamente"));
     }
 }

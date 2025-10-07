@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -28,6 +29,8 @@ public class UserServiceImpl implements UserService {
     private final RoleRepository roles;
     private final UserMapper mapper;
     private final PasswordEncoder encoder;
+
+    @Override
 
     @Transactional(readOnly = true)
     public Page<UserDTO> findAll(String q, Pageable pageable) {
@@ -47,14 +50,16 @@ public class UserServiceImpl implements UserService {
         return users.findAll(spec, pageable).map(mapper::toDTO);
     }
 
+    @Override
     @Transactional(readOnly = true)
-    public UserDTO findById(Long id) {
+    public UserDTO findById(UUID id) {
         log.debug("UserService.findById id={}", id);
         User user = users.findById(id)
                 .orElseThrow(() -> new NotFoundException("Usuario no encontrado con ID: " + id));
         return mapper.toDTO(user);
     }
 
+    @Override
     @Transactional
     public UserDTO create(CreateUserRequest req) {
         log.info("UserService.create email={}", req.email());
@@ -81,8 +86,9 @@ public class UserServiceImpl implements UserService {
         return mapper.toDTO(saved);
     }
 
+    @Override
     @Transactional
-    public UserDTO update(Long id, UpdateUserRequest req) {
+    public UserDTO update(UUID id, UpdateUserRequest req) {  // ← Cambiar Long a UUID
         log.debug("UserService.update id={} email={}", id, req.email());
 
         User user = users.findById(id)
@@ -105,8 +111,9 @@ public class UserServiceImpl implements UserService {
         return mapper.toDTO(updated);
     }
 
+    @Override
     @Transactional
-    public void delete(Long id) {
+    public void delete(UUID id) {  // ← Cambiar Long a UUID
         log.debug("UserService.delete id={}", id);
 
         if (!users.existsById(id)) {

@@ -3,5 +3,7 @@ package com.sprintboot.webapp.plantilla.modules.logging.infrastructure.repositor
 import com.sprintboot.webapp.plantilla.modules.logging.domain.RequestLog;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface RequestLogRepository extends JpaRepository<RequestLog, Long> {
+import java.util.UUID;
+
+public interface RequestLogRepository extends JpaRepository<RequestLog, UUID> {
 }

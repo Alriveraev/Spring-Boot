@@ -8,31 +8,25 @@ import com.sprintboot.webapp.plantilla.modules.auth.infrastructure.repository.Us
 import com.sprintboot.webapp.plantilla.modules.users.domain.Role;
 import com.sprintboot.webapp.plantilla.modules.users.domain.User;
 import com.sprintboot.webapp.plantilla.modules.users.infrastructure.repository.UserRepository;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.validation.annotation.Validated;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.nio.charset.StandardCharsets;
-import org.springframework.validation.annotation.Validated;
-
 @Slf4j
 @Service
-@Transactional
 @RequiredArgsConstructor
-@Validated
 public class AuthService {
 
     private final UserRepository users;
@@ -42,129 +36,214 @@ public class AuthService {
     private final JwtService jwt;
 
     private static final long REFRESH_DAYS = 30;
+    private static final int TOKEN_SECRET_BYTES = 64;
     private final SecureRandom random = new SecureRandom();
 
-    // New method for hashing refresh tokens
+    @Transactional
+    public AuthTokensResponse login(AuthLoginRequest req, String ip, String ua) {
+        log.debug("AuthService.login email={}", req.email());
+
+        // Buscar usuario
+        String email = req.email().trim().toLowerCase();
+        User user = users.findByEmail(email)
+                .orElseThrow(() -> new BadCredentialsException("Credenciales inválidas"));
+
+        // Validar estado del usuario
+        if (!user.isEnabled() || user.isLocked()) {
+            throw new BadCredentialsException("Usuario deshabilitado o bloqueado");
+        }
+
+        // Validar contraseña
+        if (!encoder.matches(req.password(), user.getPasswordHash())) {
+            throw new BadCredentialsException("Credenciales inválidas");
+        }
+
+        // Construir claims del JWT
+        Set<String> roleCodes = user.getRoles().stream()
+                .map(Role::getCode)
+                .collect(Collectors.toSet());
+
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("email", user.getEmail());
+        claims.put("roles", roleCodes);
+
+        // Generar access token
+        String accessJti = UUID.randomUUID().toString();
+        String accessToken = jwt.generateAccess(user.getId().toString(), accessJti, claims);
+
+        // Generar refresh token
+        String refreshId = UUID.randomUUID().toString();
+        String refreshSecret = generateTokenSecret(TOKEN_SECRET_BYTES);
+        String refreshToken = refreshId + "." + refreshSecret;
+        String refreshHash = hashRefreshToken(refreshToken);
+        Instant refreshExpiration = Instant.now().plus(REFRESH_DAYS, ChronoUnit.DAYS);
+
+        // Guardar sesión
+        UserSession session = UserSession.builder()
+                .user(user)
+                .refreshTokenId(refreshId)
+                .refreshHash(refreshHash)
+                .accessJti(accessJti)
+                .expiresAt(refreshExpiration)
+                .ipAddress(ip)
+                .userAgent(ua)
+                .build();
+        sessions.save(session);
+
+        // Actualizar último login
+        user.setLastLoginAt(Instant.now());
+
+        log.info("Login exitoso: userId={} email={}", user.getId(), user.getEmail());
+
+        return new AuthTokensResponse(
+                accessToken,
+                jwt.getAccessSeconds(),
+                refreshToken,
+                REFRESH_DAYS * 24 * 3600,
+                "Bearer"
+        );
+    }
+
+    @Transactional
+    public AuthTokensResponse refresh(AuthRefreshRequest req, String ip, String ua) {
+        log.debug("AuthService.refresh");
+
+        // Validar formato del refresh token
+        String token = req.refreshToken().trim();
+        String[] parts = token.split("\\.", 2);
+        if (parts.length != 2) {
+            throw new BadCredentialsException("Formato de refresh token inválido");
+        }
+
+        String refreshId = parts[0];
+        String refreshSecret = parts[1];
+
+        // Buscar sesión
+        UserSession session = sessions.findByRefreshTokenId(refreshId)
+                .orElseThrow(() -> new BadCredentialsException("Refresh token inválido"));
+
+        // Validar estado de la sesión
+        if (session.getRevokedAt() != null) {
+            throw new BadCredentialsException("Refresh token revocado");
+        }
+
+        if (session.getExpiresAt().isBefore(Instant.now())) {
+            throw new BadCredentialsException("Refresh token expirado");
+        }
+
+        // Validar hash del refresh token
+        String expectedHash = hashRefreshToken(refreshId + "." + refreshSecret);
+        if (!expectedHash.equals(session.getRefreshHash())) {
+            throw new BadCredentialsException("Refresh token inválido");
+        }
+
+        User user = session.getUser();
+
+        // Revocar el access token anterior
+        if (session.getAccessJti() != null) {
+            revoked.save(RevokedToken.builder()
+                    .jti(session.getAccessJti())
+                    .reason("refresh rotation")
+                    .build());
+        }
+
+        // Revocar la sesión anterior
+        session.revoke("rotated");
+        sessions.save(session);
+
+        // Construir nuevos claims
+        Set<String> roleCodes = user.getRoles().stream()
+                .map(Role::getCode)
+                .collect(Collectors.toSet());
+
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("email", user.getEmail());
+        claims.put("roles", roleCodes);
+
+        // Generar nuevo access token
+        String newAccessJti = UUID.randomUUID().toString();
+        String newAccessToken = jwt.generateAccess(user.getId().toString(), newAccessJti, claims);
+
+        // Generar nuevo refresh token
+        String newRefreshId = UUID.randomUUID().toString();
+        String newRefreshSecret = generateTokenSecret(TOKEN_SECRET_BYTES);
+        String newRefreshToken = newRefreshId + "." + newRefreshSecret;
+        String newRefreshHash = hashRefreshToken(newRefreshToken);
+        Instant newExpiration = Instant.now().plus(REFRESH_DAYS, ChronoUnit.DAYS);
+
+        // Crear nueva sesión
+        UserSession newSession = UserSession.builder()
+                .user(user)
+                .refreshTokenId(newRefreshId)
+                .refreshHash(newRefreshHash)
+                .accessJti(newAccessJti)
+                .expiresAt(newExpiration)
+                .ipAddress(ip)
+                .userAgent(ua)
+                .build();
+        sessions.save(newSession);
+
+        log.info("Token renovado: userId={}", user.getId());
+
+        return new AuthTokensResponse(
+                newAccessToken,
+                jwt.getAccessSeconds(),
+                newRefreshToken,
+                REFRESH_DAYS * 24 * 3600,
+                "Bearer"
+        );
+    }
+
+    @Transactional
+    public void logout(AuthLogoutRequest req) {
+        log.debug("AuthService.logout");
+
+        String token = req.refreshToken().trim();
+        String[] parts = token.split("\\.", 2);
+        if (parts.length != 2) {
+            log.warn("Formato de refresh token inválido en logout");
+            return;
+        }
+
+        String refreshId = parts[0];
+        String refreshSecret = parts[1];
+
+        sessions.findByRefreshTokenId(refreshId).ifPresent(session -> {
+            String expectedHash = hashRefreshToken(refreshId + "." + refreshSecret);
+
+            if (session.getRevokedAt() == null && expectedHash.equals(session.getRefreshHash())) {
+                session.revoke("logout");
+                sessions.save(session);
+
+                if (session.getAccessJti() != null) {
+                    revoked.save(RevokedToken.builder()
+                            .jti(session.getAccessJti())
+                            .reason("logout")
+                            .build());
+                }
+
+                log.info("Logout exitoso: userId={}", session.getUser().getId());
+            } else {
+                log.warn("Intento de logout con token inválido o ya revocado");
+            }
+        });
+    }
+
+    // --- Métodos privados auxiliares ---
+
     private String hashRefreshToken(String token) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(token.getBytes(StandardCharsets.UTF_8));
             return Base64.getEncoder().encodeToString(hash);
         } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 algorithm not available", e);
+            throw new RuntimeException("Algoritmo SHA-256 no disponible", e);
         }
-    }
-
-    public AuthTokensResponse login(@Valid AuthLoginRequest req, String ip, String ua) {
-        log.info("POST /api/auth/login email={} ip={}", req.email(), ip);
-        User u = users.findByEmail(req.email().trim().toLowerCase())
-                .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));;
-        if (!u.isEnabled() || u.isLocked()) throw new BadCredentialsException("User disabled or locked");
-        if (!encoder.matches(req.password(), u.getPasswordHash()))
-            throw new BadCredentialsException("Invalid credentials");
-
-        Set<String> roleCodes = u.getRoles().stream().map(Role::getCode).collect(Collectors.toSet());
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("email", u.getEmail());
-        claims.put("roles", roleCodes);
-
-        String accessJti = UUID.randomUUID().toString();
-        String access = jwt.generateAccess(u.getId().toString(), accessJti, claims);
-
-        String refreshId = UUID.randomUUID().toString();
-        String refreshSecret = generateTokenSecret(64);
-        String refreshToken = refreshId + "." + refreshSecret;
-        String refreshHash = hashRefreshToken(refreshToken); // ✅ Use SHA-256
-        Instant refreshExp = Instant.now().plus(REFRESH_DAYS, ChronoUnit.DAYS);
-
-        UserSession sess = UserSession.builder()
-                .user(u).refreshTokenId(refreshId).refreshHash(refreshHash)
-                .accessJti(accessJti).expiresAt(refreshExp).ipAddress(ip).userAgent(ua).build();
-        sessions.save(sess);
-
-        u.setLastLoginAt(Instant.now());
-
-        return new AuthTokensResponse(
-                access, jwt.getAccessSeconds(),
-                refreshToken, REFRESH_DAYS * 24 * 3600,
-                "Bearer"
-        );
-    }
-
-    public AuthTokensResponse refresh(AuthRefreshRequest req, String ip, String ua) {
-        log.info("POST /api/auth/refresh ip={}", ip);
-        String token = req.refreshToken().trim();
-        String[] parts = token.split("\\.", 2);
-        if (parts.length != 2) throw new BadCredentialsException("Malformed refresh token");
-        String id = parts[0];
-        String secret = parts[1];
-
-        UserSession sess = sessions.findByRefreshTokenId(id)
-                .orElseThrow(() -> new BadCredentialsException("Invalid refresh token"));
-
-        if (sess.getRevokedAt() != null || sess.getExpiresAt().isBefore(Instant.now()))
-            throw new BadCredentialsException("Refresh token expired or revoked");
-
-        // Use SHA-256 comparison
-        if (!hashRefreshToken(id + "." + secret).equals(sess.getRefreshHash()))
-            throw new BadCredentialsException("Invalid refresh token");
-
-        User u = sess.getUser();
-
-        if (sess.getAccessJti() != null) {
-            revoked.save(RevokedToken.builder().jti(sess.getAccessJti()).reason("refresh rotation").build());
-        }
-
-        sess.revoke("rotated");
-        sessions.save(sess);
-
-        Set<String> roleCodes = u.getRoles().stream().map(Role::getCode).collect(Collectors.toSet());
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("email", u.getEmail());
-        claims.put("roles", roleCodes);
-
-        String newJti = UUID.randomUUID().toString();
-        String access = jwt.generateAccess(u.getId().toString(), newJti, claims);
-
-        String newId = UUID.randomUUID().toString();
-        String newSecret = generateTokenSecret(64);
-        String newRefresh = newId + "." + newSecret;
-        String newHash = hashRefreshToken(newRefresh); // ✅ Use SHA-256
-        Instant newExp = Instant.now().plus(REFRESH_DAYS, ChronoUnit.DAYS);
-
-        UserSession newSess = UserSession.builder()
-                .user(u).refreshTokenId(newId).refreshHash(newHash)
-                .accessJti(newJti).expiresAt(newExp).ipAddress(ip).userAgent(ua).build();
-        sessions.save(newSess);
-
-        return new AuthTokensResponse(
-                access, jwt.getAccessSeconds(),
-                newRefresh, REFRESH_DAYS * 24 * 3600,
-                "Bearer"
-        );
-    }
-
-    public void logout(AuthLogoutRequest req) {
-        log.info("POST /api/auth/logout");
-        String token = req.refreshToken().trim();
-        String[] parts = token.split("\\.", 2);
-        if (parts.length != 2) return;
-        String id = parts[0];
-        String secret = parts[1];
-
-        sessions.findByRefreshTokenId(id).ifPresent(sess -> {
-            if (sess.getRevokedAt() == null && hashRefreshToken(id + "." + secret).equals(sess.getRefreshHash())) {
-                sess.revoke("logout");
-                sessions.save(sess);
-                if (sess.getAccessJti() != null)
-                    revoked.save(RevokedToken.builder().jti(sess.getAccessJti()).reason("logout").build());
-            }
-        });
     }
 
     private String generateTokenSecret(int bytes) {
-        byte[] buf = new byte[bytes];
-        random.nextBytes(buf);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(buf);
+        byte[] buffer = new byte[bytes];
+        random.nextBytes(buffer);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(buffer);
     }
 }

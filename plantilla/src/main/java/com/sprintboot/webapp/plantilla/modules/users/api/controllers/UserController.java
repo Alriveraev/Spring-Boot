@@ -14,6 +14,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import java.util.UUID;
 
 @Slf4j
 @Tag(name = "Users")
@@ -38,7 +39,7 @@ public class UserController {
     @Operation(summary = "Obtener usuario por ID (USER/ADMIN)")
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<UserDTO>> get(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<UserDTO>> get(@PathVariable UUID id) {
         log.info("GET /api/users/{}", id);
         UserDTO user = service.findById(id);
         return ResponseEntity.ok(ApiResponse.of(user));
@@ -59,7 +60,7 @@ public class UserController {
     @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<UserDTO>> update(
-            @PathVariable Long id,
+            @PathVariable UUID id,
             @Valid @RequestBody UpdateUserRequest req) {
         log.info("PUT /api/users/{} email={}", id, req.email());
         UserDTO updated = service.update(id, req);
@@ -69,9 +70,9 @@ public class UserController {
     @Operation(summary = "Eliminar usuario (ADMIN)")
     @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
         log.info("DELETE /api/users/{}", id);
         service.delete(id);
-        return ResponseEntity.ok(ApiResponse.success("Usuario eliminado exitosamente", null));
+        return ResponseEntity.ok(ApiResponse.message("Usuario eliminado exitosamente"));
     }
 }
